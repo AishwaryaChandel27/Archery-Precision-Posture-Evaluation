@@ -1,0 +1,334 @@
+import mediapipe as mp
+import numpy as np
+import cv2
+from typing import List, Dict, Optional, Tuple
+import math
+
+class PoseAnalyzer:
+    """Analyzes human pose using MediaPipe for archery form evaluation"""
+    
+    def __init__(self):
+        self.mp_pose = mp.solutions.pose
+        self.mp_draw = mp.solutions.drawing_utils
+        self.pose = self.mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=2,
+            enable_segmentation=False,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        # Define key landmarks for archery analysis
+        self.key_landmarks = {
+            'nose': 0,
+            'left_shoulder': 11,
+            'right_shoulder': 12,
+            'left_elbow': 13,
+            'right_elbow': 14,
+            'left_wrist': 15,
+            'right_wrist': 16,
+            'left_hip': 23,
+            'right_hip': 24,
+            'left_knee': 25,
+            'right_knee': 26,
+            'left_ankle': 27,
+            'right_ankle': 28
+        }
+    
+    def analyze_video_poses(self, frames: List[np.ndarray]) -> List[Dict]:
+        """
+        Analyze poses for all frames in the video
+        
+        Args:
+            frames: List of video frames
+            
+        Returns:
+            List of pose analysis results for each frame
+        """
+        pose_data = []
+        
+        for i, frame in enumerate(frames):
+            frame_data = self.analyze_single_frame(frame, i)
+            pose_data.append(frame_data)
+        
+        return pose_data
+    
+    def analyze_single_frame(self, frame: np.ndarray, frame_idx: int) -> Dict:
+        """
+        Analyze pose for a single frame
+        
+        Args:
+            frame: Input frame
+            frame_idx: Frame index
+            
+        Returns:
+            Pose analysis data for the frame
+        """
+        # Convert RGB to BGR for MediaPipe
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        
+        # Process the frame
+        results = self.pose.process(frame_bgr)
+        
+        frame_data = {
+            'frame_idx': frame_idx,
+            'landmarks': None,
+            'angles': {},
+            'positions': {},
+            'pose_detected': False
+        }
+        
+        if results.pose_landmarks:
+            frame_data['pose_detected'] = True
+            
+            # Extract landmark coordinates
+            landmarks = self._extract_landmarks(results.pose_landmarks, frame.shape)
+            frame_data['landmarks'] = landmarks
+            
+            # Calculate key angles
+            angles = self._calculate_key_angles(landmarks)
+            frame_data['angles'] = angles
+            
+            # Calculate key positions
+            positions = self._calculate_key_positions(landmarks)
+            frame_data['positions'] = positions
+            
+            # Analyze archery-specific pose features
+            archery_features = self._analyze_archery_features(landmarks, frame.shape)
+            frame_data.update(archery_features)
+        
+        return frame_data
+    
+    def _extract_landmarks(self, pose_landmarks, frame_shape: Tuple[int, int, int]) -> Dict:
+        """Extract landmark coordinates and visibility"""
+        landmarks = {}
+        height, width = frame_shape[:2]
+        
+        for name, idx in self.key_landmarks.items():
+            if idx < len(pose_landmarks.landmark):
+                landmark = pose_landmarks.landmark[idx]
+                landmarks[name] = {
+                    'x': landmark.x,
+                    'y': landmark.y,
+                    'z': landmark.z,
+                    'visibility': landmark.visibility,
+                    'pixel_x': int(landmark.x * width),
+                    'pixel_y': int(landmark.y * height)
+                }
+        
+        return landmarks
+    
+    def _calculate_key_angles(self, landmarks: Dict) -> Dict:
+        """Calculate key joint angles for archery analysis"""
+        angles = {}
+        
+        try:
+            # Shoulder angles (important for draw and anchor)
+            if all(k in landmarks for k in ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow']):
+                # Left shoulder angle
+                left_shoulder_angle = self._calculate_angle(
+                    landmarks['left_elbow'], landmarks['left_shoulder'], landmarks['right_shoulder']
+                )
+                angles['left_shoulder_angle'] = left_shoulder_angle
+                
+                # Right shoulder angle
+                right_shoulder_angle = self._calculate_angle(
+                    landmarks['right_elbow'], landmarks['right_shoulder'], landmarks['left_shoulder']
+                )
+                angles['right_shoulder_angle'] = right_shoulder_angle
+            
+            # Elbow angles
+            if all(k in landmarks for k in ['left_shoulder', 'left_elbow', 'left_wrist']):
+                left_elbow_angle = self._calculate_angle(
+                    landmarks['left_shoulder'], landmarks['left_elbow'], landmarks['left_wrist']
+                )
+                angles['left_elbow_angle'] = left_elbow_angle
+            
+            if all(k in landmarks for k in ['right_shoulder', 'right_elbow', 'right_wrist']):
+                right_elbow_angle = self._calculate_angle(
+                    landmarks['right_shoulder'], landmarks['right_elbow'], landmarks['right_wrist']
+                )
+                angles['right_elbow_angle'] = right_elbow_angle
+            
+            # Spine angle (posture)
+            if all(k in landmarks for k in ['nose', 'left_hip', 'right_hip']):
+                # Calculate spine tilt
+                hip_center_x = (landmarks['left_hip']['x'] + landmarks['right_hip']['x']) / 2
+                hip_center_y = (landmarks['left_hip']['y'] + landmarks['right_hip']['y']) / 2
+                
+                spine_angle = math.degrees(math.atan2(
+                    landmarks['nose']['x'] - hip_center_x,
+                    landmarks['nose']['y'] - hip_center_y
+                ))
+                angles['spine_angle'] = abs(spine_angle)
+            
+            # Knee angles (stance stability)
+            if all(k in landmarks for k in ['left_hip', 'left_knee', 'left_ankle']):
+                left_knee_angle = self._calculate_angle(
+                    landmarks['left_hip'], landmarks['left_knee'], landmarks['left_ankle']
+                )
+                angles['left_knee_angle'] = left_knee_angle
+            
+            if all(k in landmarks for k in ['right_hip', 'right_knee', 'right_ankle']):
+                right_knee_angle = self._calculate_angle(
+                    landmarks['right_hip'], landmarks['right_knee'], landmarks['right_ankle']
+                )
+                angles['right_knee_angle'] = right_knee_angle
+        
+        except Exception as e:
+            print(f"Error calculating angles: {e}")
+        
+        return angles
+    
+    def _calculate_angle(self, point1: Dict, point2: Dict, point3: Dict) -> float:
+        """Calculate angle between three points"""
+        # Convert to numpy arrays
+        p1 = np.array([point1['x'], point1['y']])
+        p2 = np.array([point2['x'], point2['y']])
+        p3 = np.array([point3['x'], point3['y']])
+        
+        # Calculate vectors
+        v1 = p1 - p2
+        v2 = p3 - p2
+        
+        # Calculate angle
+        cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)  # Ensure valid range
+        angle = math.degrees(math.acos(cos_angle))
+        
+        return angle
+    
+    def _calculate_key_positions(self, landmarks: Dict) -> Dict:
+        """Calculate key position metrics for archery analysis"""
+        positions = {}
+        
+        try:
+            # Shoulder alignment
+            if 'left_shoulder' in landmarks and 'right_shoulder' in landmarks:
+                shoulder_level_diff = abs(
+                    landmarks['left_shoulder']['y'] - landmarks['right_shoulder']['y']
+                )
+                positions['shoulder_level_difference'] = shoulder_level_diff
+            
+            # Hip alignment
+            if 'left_hip' in landmarks and 'right_hip' in landmarks:
+                hip_level_diff = abs(
+                    landmarks['left_hip']['y'] - landmarks['right_hip']['y']
+                )
+                positions['hip_level_difference'] = hip_level_diff
+            
+            # Foot positioning
+            if 'left_ankle' in landmarks and 'right_ankle' in landmarks:
+                foot_width = abs(
+                    landmarks['left_ankle']['x'] - landmarks['right_ankle']['x']
+                )
+                positions['stance_width'] = foot_width
+            
+            # Center of gravity (approximated by hip center)
+            if 'left_hip' in landmarks and 'right_hip' in landmarks:
+                cog_x = (landmarks['left_hip']['x'] + landmarks['right_hip']['x']) / 2
+                cog_y = (landmarks['left_hip']['y'] + landmarks['right_hip']['y']) / 2
+                positions['center_of_gravity'] = {'x': cog_x, 'y': cog_y}
+            
+            # Wrist positions (for bow hand and string hand analysis)
+            if 'left_wrist' in landmarks:
+                positions['left_wrist_height'] = landmarks['left_wrist']['y']
+            if 'right_wrist' in landmarks:
+                positions['right_wrist_height'] = landmarks['right_wrist']['y']
+        
+        except Exception as e:
+            print(f"Error calculating positions: {e}")
+        
+        return positions
+    
+    def _analyze_archery_features(self, landmarks: Dict, frame_shape: Tuple[int, int, int]) -> Dict:
+        """Analyze archery-specific pose features"""
+        features = {}
+        
+        try:
+            # Determine drawing hand (assume right-handed for now)
+            # In practice, this could be detected from the pose
+            features['drawing_hand'] = 'right'
+            features['bow_hand'] = 'left'
+            
+            # Analyze draw length (distance between hands)
+            if 'left_wrist' in landmarks and 'right_wrist' in landmarks:
+                left_wrist = landmarks['left_wrist']
+                right_wrist = landmarks['right_wrist']
+                
+                draw_length = math.sqrt(
+                    (left_wrist['x'] - right_wrist['x'])**2 + 
+                    (left_wrist['y'] - right_wrist['y'])**2
+                )
+                features['draw_length'] = draw_length
+            
+            # Analyze bow arm extension
+            if all(k in landmarks for k in ['left_shoulder', 'left_elbow', 'left_wrist']):
+                # Calculate if bow arm is properly extended
+                shoulder_to_elbow = math.sqrt(
+                    (landmarks['left_shoulder']['x'] - landmarks['left_elbow']['x'])**2 +
+                    (landmarks['left_shoulder']['y'] - landmarks['left_elbow']['y'])**2
+                )
+                elbow_to_wrist = math.sqrt(
+                    (landmarks['left_elbow']['x'] - landmarks['left_wrist']['x'])**2 +
+                    (landmarks['left_elbow']['y'] - landmarks['left_wrist']['y'])**2
+                )
+                
+                arm_extension_ratio = (shoulder_to_elbow + elbow_to_wrist) / max(shoulder_to_elbow, elbow_to_wrist, 0.001)
+                features['bow_arm_extension'] = arm_extension_ratio
+            
+            # Analyze head position relative to string
+            if all(k in landmarks for k in ['nose', 'left_wrist', 'right_wrist']):
+                # Approximate string line between hands
+                string_midpoint_x = (landmarks['left_wrist']['x'] + landmarks['right_wrist']['x']) / 2
+                head_to_string_distance = abs(landmarks['nose']['x'] - string_midpoint_x)
+                features['head_to_string_distance'] = head_to_string_distance
+            
+            # Analyze body rotation (facing target)
+            if all(k in landmarks for k in ['left_shoulder', 'right_shoulder']):
+                shoulder_line_angle = math.degrees(math.atan2(
+                    landmarks['right_shoulder']['y'] - landmarks['left_shoulder']['y'],
+                    landmarks['right_shoulder']['x'] - landmarks['left_shoulder']['x']
+                ))
+                features['body_rotation'] = abs(shoulder_line_angle)
+        
+        except Exception as e:
+            print(f"Error analyzing archery features: {e}")
+        
+        return features
+    
+    def get_pose_confidence(self, landmarks: Dict) -> float:
+        """Calculate overall pose detection confidence"""
+        if not landmarks:
+            return 0.0
+        
+        total_visibility = 0
+        count = 0
+        
+        for landmark_data in landmarks.values():
+            if 'visibility' in landmark_data:
+                total_visibility += landmark_data['visibility']
+                count += 1
+        
+        return total_visibility / count if count > 0 else 0.0
+    
+    def detect_pose_issues(self, landmarks: Dict, angles: Dict) -> List[str]:
+        """Detect potential pose issues for archery"""
+        issues = []
+        
+        # Check shoulder alignment
+        if 'shoulder_level_difference' in landmarks and landmarks['shoulder_level_difference'] > 0.05:
+            issues.append("Uneven shoulder alignment detected")
+        
+        # Check extreme angles
+        if 'left_elbow_angle' in angles and angles['left_elbow_angle'] < 140:
+            issues.append("Bow arm elbow too bent")
+        
+        if 'spine_angle' in angles and angles['spine_angle'] > 15:
+            issues.append("Excessive body lean detected")
+        
+        # Check stance width
+        if 'stance_width' in landmarks and landmarks['stance_width'] < 0.1:
+            issues.append("Stance may be too narrow")
+        
+        return issues
