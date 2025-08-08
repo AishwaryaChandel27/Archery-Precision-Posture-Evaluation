@@ -83,6 +83,11 @@ def analyze_video(video_path):
         biomech_analyzer = BiomechanicalAnalyzer()
         feedback_gen = FeedbackGenerator()
         
+        # Check if MediaPipe is available
+        from pose_analyzer import MEDIAPIPE_AVAILABLE
+        if not MEDIAPIPE_AVAILABLE:
+            st.warning("⚠️ MediaPipe not available. Using demonstration mode with simulated pose data.")
+        
         # Step 1: Process video
         status_text.text("Processing video...")
         progress_bar.progress(10)
