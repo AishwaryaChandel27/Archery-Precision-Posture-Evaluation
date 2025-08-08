@@ -101,16 +101,25 @@ class VideoProcessor:
         motion_magnitudes = []
         
         for i in range(1, len(gray_frames)):
-            flow = cv2.calcOpticalFlowPyrLK(
-                gray_frames[i-1], gray_frames[i], 
-                np.array([[frame.shape[1]//2, frame.shape[0]//2]], dtype=np.float32), 
-                None
-            )[0]
+            # Create initial points for optical flow
+            h, w = gray_frames[i-1].shape
+            initial_points = np.array([[w//2, h//2]], dtype=np.float32)
             
-            if flow is not None and len(flow) > 0:
-                magnitude = np.linalg.norm(flow[0])
-                motion_magnitudes.append(magnitude)
-            else:
+            try:
+                # Calculate optical flow
+                next_points = initial_points.copy()
+                flow, status, error = cv2.calcOpticalFlowPyrLK(
+                    gray_frames[i-1], gray_frames[i], 
+                    initial_points, 
+                    next_points
+                )
+                
+                if flow is not None and len(flow) > 0 and status[0]:
+                    magnitude = np.linalg.norm(flow[0] - initial_points[0])
+                    motion_magnitudes.append(magnitude)
+                else:
+                    motion_magnitudes.append(0)
+            except Exception:
                 motion_magnitudes.append(0)
         
         # Smooth motion data
@@ -185,7 +194,7 @@ class VideoProcessor:
         height, width = frames[0].shape[:2]
         
         # Define codec and create VideoWriter
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter.fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         try:
