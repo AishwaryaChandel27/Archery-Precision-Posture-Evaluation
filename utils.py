@@ -101,7 +101,7 @@ def detect_motion_intensity(frames: List[np.ndarray]) -> List[float]:
         diff = cv2.absdiff(gray1, gray2)
         
         # Calculate motion intensity as mean of differences
-        intensity = np.mean(diff) / 255.0  # Normalize to 0-1
+        intensity = float(np.mean(diff)) / 255.0  # Normalize to 0-1
         motion_intensities.append(intensity)
     
     return motion_intensities
@@ -166,7 +166,7 @@ def calculate_pose_stability(pose_data: List[Dict]) -> float:
             stability = max(0, 1 - (x_var + y_var) * 10)
             stability_scores.append(stability)
     
-    return np.mean(stability_scores) if stability_scores else 0.0
+    return float(np.mean(stability_scores)) if stability_scores else 0.0
 
 def format_analysis_results(results: Dict[str, Any]) -> str:
     """Format analysis results for display"""

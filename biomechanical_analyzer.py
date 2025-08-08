@@ -100,9 +100,9 @@ class BiomechanicalAnalyzer:
         smoothed_motion = np.convolve(motion_data, np.ones(5)/5, mode='same')
         
         # Find draw length peaks and valleys
-        draw_start = self._find_motion_start(smoothed_motion)
-        anchor_start = self._find_anchor_phase(smoothed_motion)
-        release_start = self._find_release_point(smoothed_motion)
+        draw_start = self._find_motion_start(smoothed_motion.tolist())
+        anchor_start = self._find_anchor_phase(smoothed_motion.tolist())
+        release_start = self._find_release_point(smoothed_motion.tolist())
         
         # Define phase boundaries
         phases = {
@@ -474,7 +474,7 @@ class BiomechanicalAnalyzer:
         coefficient_of_variation = std_val / mean_val
         consistency = max(0, 1 - coefficient_of_variation)
         
-        return consistency
+        return float(consistency)
     
     def _calculate_position_stability(self, positions: List[Tuple[float, float]]) -> float:
         """Calculate stability score for position data"""
@@ -492,7 +492,7 @@ class BiomechanicalAnalyzer:
         avg_movement = np.mean(movements)
         stability = max(0, 1 - avg_movement * 10)  # Scale factor
         
-        return stability
+        return float(stability)
     
     def _calculate_release_smoothness(self, positions: List[Tuple[float, float]]) -> float:
         """Calculate smoothness of release motion"""
@@ -511,7 +511,7 @@ class BiomechanicalAnalyzer:
         # Lower acceleration variance indicates smoother motion
         if accelerations:
             smoothness = max(0, 1 - np.std(accelerations) * 100)  # Scale factor
-            return smoothness
+            return float(smoothness)
         
         return 1.0
     
