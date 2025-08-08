@@ -183,11 +183,11 @@ def display_phase_analysis(biomech_results):
                 phase_data = biomech_results[phase]
                 
                 # Score
-                score = phase_data.get('score', 0)
+                score = getattr(phase_data, 'score', 0)
                 st.metric(f"{phase_name} Score", f"{score:.1f}/100")
                 
                 # Issues
-                issues = phase_data.get('issues', [])
+                issues = getattr(phase_data, 'issues', [])
                 if issues:
                     st.write("**Issues Identified:**")
                     for issue in issues:
@@ -196,7 +196,7 @@ def display_phase_analysis(biomech_results):
                     st.write("✅ No major issues detected")
                 
                 # Metrics
-                metrics = phase_data.get('metrics', {})
+                metrics = getattr(phase_data, 'metrics', {})
                 if metrics:
                     st.write("**Key Metrics:**")
                     metric_cols = st.columns(min(len(metrics), 4))
@@ -298,8 +298,8 @@ def display_comprehensive_report(results):
     for phase, phase_name in zip(phases, phase_names):
         if phase in biomech_results:
             phase_data = biomech_results[phase]
-            score = phase_data.get('score', 0)
-            issues_count = len(phase_data.get('issues', []))
+            score = getattr(phase_data, 'score', 0)
+            issues_count = len(getattr(phase_data, 'issues', []))
             summary_data.append({
                 'Phase': phase_name,
                 'Score': f"{score:.1f}/100",
@@ -346,9 +346,9 @@ def generate_text_report(results):
         if phase in results['biomech_results']:
             phase_data = results['biomech_results'][phase]
             report += f"\n{phase_name}:\n"
-            report += f"  Score: {phase_data.get('score', 0):.1f}/100\n"
+            report += f"  Score: {getattr(phase_data, 'score', 0):.1f}/100\n"
             
-            issues = phase_data.get('issues', [])
+            issues = getattr(phase_data, 'issues', [])
             if issues:
                 report += "  Issues:\n"
                 for issue in issues:
@@ -374,8 +374,8 @@ def calculate_overall_score(biomech_results):
     phase_count = 0
     
     for phase in phases:
-        if phase in biomech_results and 'score' in biomech_results[phase]:
-            total_score += biomech_results[phase]['score']
+        if phase in biomech_results and hasattr(biomech_results[phase], 'score'):
+            total_score += biomech_results[phase].score
             phase_count += 1
     
     return total_score / phase_count if phase_count > 0 else 0
