@@ -43,7 +43,7 @@ This application leverages advanced computer vision and biomechanical analysis t
 #### Option 2: Local Setup
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/AishwaryaChandel27/Archery-Precision-Posture-Evaluation
    cd archery-analysis
    ```
 
