@@ -1,4 +1,4 @@
-# AI-Powered Archery Form Analysis
+# AI-Powered Archery Form Analysis 
 
 A comprehensive computer vision-based application that analyzes archery technique and provides detailed biomechanical feedback to help archers improve their form, posture, and shooting consistency.
 
